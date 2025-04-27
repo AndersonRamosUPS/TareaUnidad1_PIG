@@ -27,7 +27,7 @@ import javax.swing.JLabel;
 public class LogicaContactos implements ActionListener, ListSelectionListener, ItemListener {
 
     private ContactoVista vista;
-    private List<Persona>  contactos = new ArrayList<>();   //Lista en memoria
+    private List<Persona> contactos = new ArrayList<>();   //Lista en memoria
     private Persona personaSeleccionada;
     private String nombres, telefono, email, categoria = "";
     private boolean favorito = false;
@@ -39,6 +39,8 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
 
         // Cargar contactos del archivo al iniciar
         cargarContactosRegistrados();
+
+        asociarEventosIconos();
 
         // Asociar eventos a componentes
         this.vista.getBtnAgregar().addActionListener(this);
@@ -101,14 +103,12 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
                 vista.getBarraProgreso().setValue(100);
                 vista.getBarraProgreso().setString("Carga completada");
 
-                actualizarTabla();           // ✅ Ya estaba
-                actualizarEstadisticas();   // ✅ Esto le faltaba
+                actualizarTabla();          
+                actualizarEstadisticas();   
             }
         };
         worker.execute();
     }
-
-
 
     private void limpiarCampos() {
         vista.getTxtNombre().setText("");
@@ -172,16 +172,16 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
     }
 
     private void actualizarTabla() {
-        String[] columnas = { "Nombre", "Teléfono", "Email", "Categoría", "Favorito" };
+        String[] columnas = {"Nombre", "Teléfono", "Email", "Categoría", "Favorito"};
         DefaultTableModel modelo = new DefaultTableModel(columnas, 0);
 
         for (Persona p : contactos) {
             String[] fila = {
-                    p.getNombre(),
-                    p.getTelefono(),
-                    p.getEmail(),
-                    p.getCategoria(),
-                    p.isFavorito() ? "Sí" : "No"
+                p.getNombre(),
+                p.getTelefono(),
+                p.getEmail(),
+                p.getCategoria(),
+                p.isFavorito() ? "Sí" : "No"
             };
             modelo.addRow(fila);
         }
@@ -192,7 +192,6 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
         sorter = new TableRowSorter<>(modelo);
         vista.getTablaContactos().setRowSorter(sorter);
     }
-
 
     private void exportarA_CSV() {
         JFileChooser fileChooser = new JFileChooser();
@@ -212,11 +211,11 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
                         bw.write("Nombre,Teléfono,Email,Categoría,Favorito");
                         bw.newLine();
                         for (Persona p : contactos) {
-                            bw.write(p.getNombre() + "," +
-                                    p.getTelefono() + "," +
-                                    p.getEmail() + "," +
-                                    p.getCategoria() + "," +
-                                    p.isFavorito());
+                            bw.write(p.getNombre() + ","
+                                    + p.getTelefono() + ","
+                                    + p.getEmail() + ","
+                                    + p.getCategoria() + ","
+                                    + p.isFavorito());
                             bw.newLine();
                         }
                     } catch (IOException ex) {
@@ -256,13 +255,19 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
         int familia = 0, amigos = 0, trabajo = 0, otros = 0;
 
         for (Persona p : contactos) {
-            if (p.isFavorito()) favoritos++;
+            if (p.isFavorito()) {
+                favoritos++;
+            }
 
             switch (p.getCategoria()) {
-                case "Familia" -> familia++;
-                case "Amigos"  -> amigos++;
-                case "Trabajo" -> trabajo++;
-                case "Otros"   -> otros++;
+                case "Familia" ->
+                    familia++;
+                case "Amigos" ->
+                    amigos++;
+                case "Trabajo" ->
+                    trabajo++;
+                case "Otros" ->
+                    otros++;
             }
         }
 
@@ -273,7 +278,6 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
         vista.getLblCategoriaTrabajo().setText("Trabajo: " + trabajo);
         vista.getLblCategoriaOtros().setText("Otros: " + otros);
     }
-
 
     @Override
     public void valueChanged(ListSelectionEvent e) {
@@ -296,4 +300,55 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
             favorito = vista.getChbFavoritos().isSelected();
         }
     }
+
+    private void asociarEventosIconos() {
+        vista.getLblFamiliaIco().addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                vista.getCmbCategoria().setSelectedItem("Familia");
+            }
+
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                vista.getLblFamiliaIco().setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+            }
+        });
+
+        vista.getLblAmigosIco().addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                vista.getCmbCategoria().setSelectedItem("Amigos");
+            }
+
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                vista.getLblAmigosIco().setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+            }
+        });
+
+        vista.getLblTrabajoIco().addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                vista.getCmbCategoria().setSelectedItem("Trabajo");
+            }
+
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                vista.getLblTrabajoIco().setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+            }
+        });
+
+        vista.getLblFavoritoIco().addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                vista.getChbFavoritos().setSelected(true);
+            }
+
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent evt) {
+                vista.getLblFavoritoIco().setCursor(new java.awt.Cursor(java.awt.Cursor.HAND_CURSOR));
+            }
+        });
+    }
+
 }
