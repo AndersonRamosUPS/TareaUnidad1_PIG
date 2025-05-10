@@ -32,8 +32,9 @@ public class PersonaDAO {
         try (BufferedReader br = new BufferedReader(new FileReader(RUTA_CSV))) {    //Leer textos desde archivos
             String linea;
             while ((linea = br.readLine()) != null) {   //Leer archivo linea por linea
-                if (linea.trim().isEmpty()) continue;   //Si la linea esta vacia pasamos a la siguiente
-
+                if (linea.trim().isEmpty()) {
+                    continue;   //Si la linea esta vacia pasamos a la siguiente
+                }
                 String[] campos = linea.split(",");     //Corta la cadena cada vez que encuentra una coma
                 if (campos.length >= 5) {   // Son 4 elementos, pero 5 por si una linea incompleta, por seguridad
                     String nombre = campos[0];
@@ -50,8 +51,9 @@ public class PersonaDAO {
         }
         return personas;
     }
-
-    public void escribirArchivo(Persona persona) {
+    
+    // Metodo sincronizado para evitar conflictos si dos hilos escriben al archivo a la misma vez
+    public synchronized void escribirArchivo(Persona persona) {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(RUTA_CSV, true))) {
             bw.write(persona.getNombre() + ","
                     + persona.getTelefono() + ","
@@ -63,8 +65,9 @@ public class PersonaDAO {
             e.printStackTrace();
         }
     }
-
-    public void actualizarContactos(List<Persona> personas) {
+    
+    // Tambien sincronizamos la sobrescritura del archivo completo
+    public synchronized void actualizarContactos(List<Persona> personas) {
         try (BufferedWriter bw = new BufferedWriter(new FileWriter(RUTA_CSV))) {
             for (Persona persona : personas) {
                 bw.write(persona.getNombre() + ","
@@ -78,4 +81,5 @@ public class PersonaDAO {
             e.printStackTrace();
         }
     }
+
 }

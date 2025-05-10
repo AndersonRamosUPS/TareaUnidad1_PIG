@@ -32,6 +32,7 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
     private String nombres, telefono, email, categoria = "";
     private boolean favorito = false;
     private TableRowSorter<DefaultTableModel> sorter;
+    private final Object contactoLock = new Object();
 
     public LogicaContactos(ContactoVista vista) {
         this.vista = vista;
@@ -103,8 +104,8 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
                 vista.getBarraProgreso().setValue(100);
                 vista.getBarraProgreso().setString("Carga completada");
 
-                actualizarTabla();          
-                actualizarEstadisticas();   
+                actualizarTabla();
+                actualizarEstadisticas();
             }
         };
         worker.execute();
@@ -138,9 +139,62 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
             if (!nombres.isEmpty() && !telefono.isEmpty() && !email.isEmpty()) {
                 if (!categoria.equals("Elija una Categoria") && !categoria.isEmpty()) {
                     Persona nueva = new Persona(nombres, telefono, email, categoria, favorito);
-                    new PersonaDAO().escribirArchivo(nueva);
-                    JOptionPane.showMessageDialog(vista, "¡Contacto registrado!");
-                    limpiarCampos();
+
+                    // Al presionar el boton "Agregar" validamos el contacto en segundo plano usando SwingWorker
+                    SwingWorker<Boolean, Void> worker = new SwingWorker<>() {
+                        @Override
+                        protected Boolean doInBackground() {
+                            // Esto se ejecuta en un hilo secundario de tal manera que no bloquea la interfaz
+                            vista.getBarraProgreso().setIndeterminate(true);
+                            vista.getBarraProgreso().setString("Validando contacto...");
+
+                            try {
+                                Thread.sleep(500); // Simular proceso lento
+                            } catch (InterruptedException ex) {
+                                ex.printStackTrace();
+                            }
+
+                            // Verificamos si ya existe un contacto con el mismo número
+                            for (Persona p : contactos) {
+                                if (p.getTelefono().equals(nueva.getTelefono())) {
+                                    return true; // Duplicado encontrado
+                                }
+                            }
+                            return false; // No duplicado
+                        }
+
+                        @Override
+                        protected void done() {
+                            // Esto se ejecuta en el hilo de la interfaz (Event Dispatch Thread)
+                            vista.getBarraProgreso().setIndeterminate(false);
+                            vista.getBarraProgreso().setValue(100);
+                            vista.getBarraProgreso().setString("Validación completada");
+
+                            try {
+                                boolean duplicado = get();
+                                if (duplicado) {
+                                    // Mostramos una notificacion en la UI usando invokeLater (opcional pero explícito)
+                                    SwingUtilities.invokeLater(() -> {
+                                        JOptionPane.showMessageDialog(vista, "El número ya está registrado.");
+                                    });
+                                } else {
+                                    // Si no está duplicado, guardamos el contacto
+                                    new PersonaDAO().escribirArchivo(nueva);
+                                    SwingUtilities.invokeLater(() -> {
+                                        JOptionPane.showMessageDialog(vista, "¡Contacto registrado!");
+                                    });
+                                    limpiarCampos();
+                                }
+
+                            } catch (Exception ex) {
+                                ex.printStackTrace();
+                                JOptionPane.showMessageDialog(vista, "Error durante la validación.");
+                            }
+                        }
+                    };
+
+                    worker.execute();   // Ejecuta el hilo
+
                 } else {
                     JOptionPane.showMessageDialog(vista, "Seleccione una categoría válida.");
                 }
@@ -158,17 +212,24 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
         } else if (e.getSource() == vista.getBtnEditar()) {
             int index = vista.getTablaContactos().getSelectedRow();
             if (index != -1) {
-                Persona p = contactos.get(index);
-                p.setNombre(nombres);
-                p.setTelefono(telefono);
-                p.setEmail(email);
-                p.setCategoria(categoria);
-                p.setFavorito(favorito);
-                new PersonaDAO().actualizarContactos(contactos);
+
+                // Bloque sincronizado para evitar la edicion simultanea del mismo contacto
+                synchronized (contactoLock) {
+                    Persona p = contactos.get(index);
+                    p.setNombre(nombres);
+                    p.setTelefono(telefono);
+                    p.setEmail(email);
+                    p.setCategoria(categoria);
+                    p.setFavorito(favorito);
+                    new PersonaDAO().actualizarContactos(contactos);    // Escritura sincronizada
+                }
                 limpiarCampos();
-                JOptionPane.showMessageDialog(vista, "Contacto actualizado.");
+                SwingUtilities.invokeLater(() -> {
+                    JOptionPane.showMessageDialog(vista, "Contacto actualizado.");
+                });
             }
         }
+
     }
 
     private void actualizarTabla() {
@@ -208,18 +269,16 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
                     vista.getBarraProgreso().setString("Exportando contactos...");
 
                     try (BufferedWriter bw = new BufferedWriter(new FileWriter(archivo))) {
-                        bw.write("Nombre,Teléfono,Email,Categoría,Favorito");
+                        bw.write("Nombre,Tel\u00e9fono,Email,Categor\u00eda,Favorito");
                         bw.newLine();
                         for (Persona p : contactos) {
-                            bw.write(p.getNombre() + ","
-                                    + p.getTelefono() + ","
-                                    + p.getEmail() + ","
-                                    + p.getCategoria() + ","
-                                    + p.isFavorito());
+                            bw.write(p.getNombre() + "," + p.getTelefono() + "," + p.getEmail() + ","
+                                    + p.getCategoria() + "," + p.isFavorito());
                             bw.newLine();
                         }
-                    } catch (IOException ex) {
-                        JOptionPane.showMessageDialog(vista, "Error al exportar el archivo.");
+                        // Simula exportación lenta
+                        Thread.sleep(2000);
+                    } catch (IOException | InterruptedException ex) {
                         ex.printStackTrace();
                     }
                     return null;
@@ -239,14 +298,29 @@ public class LogicaContactos implements ActionListener, ListSelectionListener, I
     }
 
     private void filtrarTabla() {
-        String texto = vista.getTxtBuscar().getText();
-        if (sorter != null) {
-            if (texto.trim().isEmpty()) {
-                sorter.setRowFilter(null); // quitar filtro
-            } else {
-                sorter.setRowFilter(RowFilter.regexFilter("(?i)" + texto, 0)); // filtra por columna "Nombre"
+        String texto = vista.getTxtBuscar().getText().trim();
+
+        // Creamos un SwingWorker para ejecutar el filtrado sin bloquear la interfaz
+        SwingWorker<Void, Void> searchWorker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() {
+                // Esta parte se ejecuta en segundo plano
+                if (sorter != null) {
+                    if (texto.isEmpty()) {
+                        // Si no hay texto se quita el filtro
+                        sorter.setRowFilter(null); // quitar filtro
+                    } else {
+                        // Se filtra por nombre (columna 0) sin distinguir mayúsculas/minúsculas
+                        RowFilter<DefaultTableModel, Object> filtro = RowFilter.regexFilter("(?i)" + texto, 0); // columna 0 = nombre
+                        sorter.setRowFilter(filtro);
+                    }
+                }
+                return null;
             }
-        }
+        };
+
+        // Ejecutamos el hilo de búsqueda
+        searchWorker.execute();
     }
 
     private void actualizarEstadisticas() {
